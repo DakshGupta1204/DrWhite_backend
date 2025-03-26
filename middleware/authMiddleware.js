@@ -2,7 +2,8 @@ const jwt = require("jsonwebtoken");
 const User = require("../models/User");
 const dotenv = require("dotenv");
 dotenv.config();
-const protect = async (req, res, next) => {
+
+const authenticateToken = async (req, res, next) => {
   let token = req.headers.authorization;
 
   if (token && token.startsWith("Bearer")) {
@@ -18,4 +19,13 @@ const protect = async (req, res, next) => {
   }
 };
 
-module.exports = protect;
+// Middleware to check if user is an admin
+const isAdmin = async (req, res, next) => {
+  if (req.user && req.user.isAdmin) {
+    next();
+  } else {
+    res.status(403).json({ message: "Not authorized as an admin" });
+  }
+};
+
+module.exports = { authenticateToken, isAdmin };
