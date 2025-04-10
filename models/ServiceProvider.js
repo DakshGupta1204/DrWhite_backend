@@ -4,6 +4,7 @@ const serviceProviderSchema = new mongoose.Schema(
   {
     name: { type: String, required: true },
     category: { type: mongoose.Schema.Types.ObjectId, ref: 'Category', required: true },
+    categories: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Category' }], // Array of category IDs for multi-category support
     address: { 
       street: { type: String, required: true },
       city: { type: String, required: true },

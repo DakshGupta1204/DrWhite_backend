@@ -4,7 +4,9 @@ const Category = require("../models/Category");
 // Get all service providers - admin only
 exports.getAllServiceProviders = async (req, res) => {
   try {
-    const providers = await ServiceProvider.find().populate('category');
+    const providers = await ServiceProvider.find()
+      .populate('category')
+      .populate('categories');
     res.status(200).json(providers);
   } catch (error) {
     console.error("Error fetching service providers:", error);
@@ -23,10 +25,17 @@ exports.getServiceProvidersByCategory = async (req, res) => {
       return res.status(404).json({ message: "Category not found" });
     }
     
+    // Find providers that have this category as either the primary category
+    // or as one of their categories in the array
     const providers = await ServiceProvider.find({ 
-      category: categoryId,
+      $or: [
+        { category: categoryId },
+        { categories: categoryId }
+      ],
       isAvailable: true 
-    }).populate('category');
+    })
+    .populate('category')
+    .populate('categories');
     
     res.status(200).json(providers);
   } catch (error) {
@@ -91,7 +100,9 @@ exports.getServiceProvidersByLocation = async (req, res) => {
 // Get a single service provider by ID
 exports.getServiceProviderById = async (req, res) => {
   try {
-    const provider = await ServiceProvider.findById(req.params.id).populate('category');
+    const provider = await ServiceProvider.findById(req.params.id)
+      .populate('category')
+      .populate('categories');
     
     if (!provider) {
       return res.status(404).json({ message: "Service provider not found" });
@@ -110,6 +121,7 @@ exports.createServiceProvider = async (req, res) => {
     const {
       name,
       category,
+      categories,
       address,
       location,
       contacts,
@@ -126,15 +138,33 @@ exports.createServiceProvider = async (req, res) => {
       certifications
     } = req.body;
     
-    // Verify category exists
+    // Verify primary category exists
     const categoryExists = await Category.findById(category);
     if (!categoryExists) {
       return res.status(404).json({ message: "Category not found" });
     }
     
+    // Process categories - ensure we have an array with valid categories
+    let validatedCategories = [];
+    if (categories && Array.isArray(categories) && categories.length > 0) {
+      // Filter to only include valid category IDs
+      for (const catId of categories) {
+        const exists = await Category.findById(catId);
+        if (exists) {
+          validatedCategories.push(catId);
+        }
+      }
+    }
+    
+    // If no valid categories provided, use the primary category
+    if (validatedCategories.length === 0) {
+      validatedCategories = [category];
+    }
+    
     const newProvider = new ServiceProvider({
       name,
       category,
+      categories: validatedCategories,
       address,
       location,
       contacts,
@@ -153,7 +183,9 @@ exports.createServiceProvider = async (req, res) => {
     
     await newProvider.save();
     
-    const populatedProvider = await ServiceProvider.findById(newProvider._id).populate('category');
+    const populatedProvider = await ServiceProvider.findById(newProvider._id)
+      .populate('category')
+      .populate('categories');
     
     res.status(201).json(populatedProvider);
   } catch (error) {
@@ -168,6 +200,7 @@ exports.updateServiceProvider = async (req, res) => {
     const {
       name,
       category,
+      categories,
       address,
       location,
       contacts,
@@ -192,28 +225,55 @@ exports.updateServiceProvider = async (req, res) => {
       }
     }
     
+    // Process categories if provided
+    let validatedCategories = undefined;
+    if (categories && Array.isArray(categories) && categories.length > 0) {
+      validatedCategories = [];
+      // Filter to only include valid category IDs
+      for (const catId of categories) {
+        const exists = await Category.findById(catId);
+        if (exists) {
+          validatedCategories.push(catId);
+        }
+      }
+      
+      // If all provided categories were invalid but a primary category exists
+      if (validatedCategories.length === 0 && category) {
+        validatedCategories = [category];
+      }
+    }
+    
+    const updateData = {
+      name,
+      category,
+      address,
+      location,
+      contacts,
+      rating,
+      reviews,
+      priceRange,
+      isVerified,
+      isAvailable,
+      description,
+      images,
+      openingHours,
+      services,
+      experienceYears,
+      certifications
+    };
+    
+    // Only include categories in update if it was provided and validated
+    if (validatedCategories !== undefined) {
+      updateData.categories = validatedCategories;
+    }
+    
     const updatedProvider = await ServiceProvider.findByIdAndUpdate(
       req.params.id,
-      {
-        name,
-        category,
-        address,
-        location,
-        contacts,
-        rating,
-        reviews,
-        priceRange,
-        isVerified,
-        isAvailable,
-        description,
-        images,
-        openingHours,
-        services,
-        experienceYears,
-        certifications
-      },
+      updateData,
       { new: true, runValidators: true }
-    ).populate('category');
+    )
+    .populate('category')
+    .populate('categories');
     
     if (!updatedProvider) {
       return res.status(404).json({ message: "Service provider not found" });
